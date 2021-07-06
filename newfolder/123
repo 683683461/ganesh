@@ -1,0 +1,488 @@
+---
+# Source: corda/templates/ConfigMap.yml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: corda-node-investor-configmap
+  namespace: corda-fac
+data:
+  node.conf: |+
+    myLegalName: "O=Fac_Investor,L=London,C=GB"
+    emailAddress: ""
+    p2pAddress: "20.68.122.5:10003"
+    networkServices: {
+      doormanURL: "http://20.68.121.136:10000",
+      networkMapURL: "http://20.68.122.69:10000"
+    }
+    crlCheckSoftFail: true
+    devMode: false
+    sshd:  {
+      port: 2223
+    }
+    rpcSettings: {
+      address: "0.0.0.0:30000",
+      adminAddress: "0.0.0.0:30009"
+    }
+    rpcUsers: [
+      {
+        user: "user1",
+        password: "test",
+        permissions: [
+          "ALL"
+        ]
+      }
+    ]
+    jmxMonitoringHttpPort: 8090
+    
+    dataSourceProperties: {
+      dataSourceClassName: "org.postgresql.ds.PGSimpleDataSource",
+      dataSource.url: "jdbc:postgresql://node-investor-1.postgres.database.azure.com:5432/postgres?sslmode=require",
+      dataSource.user: "cordadb",
+      dataSource.password: "fac@cenm123"
+    }
+    
+    trustStorePassword: "trust-store-password"
+    keyStorePassword : "cordacadevpass"
+    detectPublicIp: false
+    messagingServerAddress: "0.0.0.0:10002"
+    messagingServerExternal: false
+    enterpriseConfiguration: {
+      externalBridge: true
+    }
+    cordappSignerKeyFingerprintBlacklist: [
+    ]
+  bridge.conf: |+
+    firewallMode: "BridgeInner"
+    
+    networkParametersPath: "network-parameters"
+    
+    outboundConfig: {
+      artemisBrokerAddress: "corda-node-1-node-internal:10002"
+      alternateArtemisBrokerAddresses: []
+    }
+    
+    bridgeInnerConfig: {
+      floatAddresses: [ "corda-node-1-float-internal:39999" ]
+      expectedCertificateSubject: "CN=Float Local,O=Local Only,L=London,C=GB"
+      tunnelSSLConfiguration {
+        keyStorePassword: "bridgepass"
+        trustStorePassword: "trustpass"
+        sslKeystore: "certificates/bridge.jks"
+        trustStoreFile: "certificates/trust.jks"
+      }
+    }
+    revocationConfig: { mode: "OFF"})
+    
+    certificatesDirectory: "certificates"
+    sslKeystore: "certificates/sslkeystore.jks"
+    trustStoreFile: "certificates/truststore.jks"
+    keyStorePassword: "cordacadevpass"
+    trustStorePassword: "trustpass"
+    silencedIPs: []
+    
+    enableAMQPPacketTrace: false
+    artemisReconnectionIntervalMin: 5000
+    artemisReconnectionIntervalMax: 60000
+    politeShutdownPeriod: 1000
+    p2pConfirmationWindowSize: 1048576
+    auditServiceConfiguration: {
+      loggingIntervalSec: 60
+    }
+    
+  float.conf: |+
+    firewallMode: "FloatOuter"
+    
+    networkParametersPath: "network-parameters"
+    
+    inboundConfig: {
+      listeningAddress: "0.0.0.0:10002"
+    }
+    
+    floatOuterConfig: {
+        floatAddress: "0.0.0.0:39999"
+        expectedCertificateSubject: "CN=Bridge Local,O=Local Only,L=London,C=GB"
+        tunnelSSLConfiguration: {
+               keyStorePassword: "floatpass"
+               trustStorePassword: "trustpass"
+               sslKeystore: "certificates/float.jks"
+               trustStoreFile: "certificates/trust.jks"
+        }
+    }
+    revocationConfig: { mode: "EXTERNAL_SOURCE"})
+    
+    certificatesDirectory: "certificates"
+    sslKeystore: "certificates/sslkeystore.jks"
+    trustStoreFile: "certificates/truststore.jks"
+    keyStorePassword: "cordacadevpass"
+    trustStorePassword: "trustpass"
+    silencedIPs: []
+    
+    enableAMQPPacketTrace: false
+    artemisReconnectionIntervalMin: 5000
+    artemisReconnectionIntervalMax: 60000
+    politeShutdownPeriod: 1000
+    p2pConfirmationWindowSize: 1048576
+    auditServiceConfiguration: {
+      loggingIntervalSec: 60
+    }
+    
+  ping.sh: |+
+    #!/bin/bash
+    IP=$1
+    PORT=$2
+    (echo > /dev/tcp/$IP/$PORT) > /dev/null 2>&1 && echo "UP" || echo "DOWN"
+    #Alternatives https://superuser.com/questions/621870/test-if-a-port-on-a-remote-system-is-reachable-without-telnet:
+    #curl http://$IP:$PORT
+    #nc -zv $IP $PORT &> /dev/null; echo $?
+    #cat < /dev/tcp/$IP/$PORT
+  
+  log4j2.xml: |+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Configuration status="info">
+          <Properties>
+              <Property name="log-path">../logs</Property>
+              <Property name="log-name">node-${hostName}</Property>
+              <Property name="archive">${log-path}/archive</Property>
+              <Property name="logstash-server">${env:LOGSTASH}</Property>
+          </Properties>
+          <ThresholdFilter level="trace"/>
+          <Appenders>
+              <Console name="Console-Appender" target="SYSTEM_OUT">
+                  <PatternLayout>
+                      <pattern>
+                          %highlight{%level{length=1} %d{HH:mm:ss} %T [%t] %c{1}.%M - %msg%n}{INFO=white,WARN=red,FATAL=bright
+                          red blink}
+                      </pattern>>
+                  </PatternLayout>
+              </Console>
+              <!-- Will generate up to 10 log files for a given day. During every rollover it will delete
+                  those that are older than 60 days, but keep the most recent 10 GB -->
+              <RollingFile name="RollingFile-Appender"
+                          fileName="${log-path}/${log-name}.log"
+                          filePattern="${archive}/${log-name}.%d{yyyy-MM-dd}-%i.log.gz"
+                          filePermissions="rw-rw-rw-">
+                  <PatternLayout pattern="[%-5level] %d{ISO8601}{GMT+0} [%t] %c{1} - %msg%n"/>
+                  <Policies>
+                      <TimeBasedTriggeringPolicy/>
+                      <SizeBasedTriggeringPolicy size="10MB"/>
+                  </Policies>
+                  <DefaultRolloverStrategy min="1" max="10">
+                      <Delete basePath="${archive}" maxDepth="1">
+                          <IfFileName glob="${log-name}*.log.gz"/>
+                          <IfLastModified age="60d">
+                              <IfAny>
+                                  <IfAccumulatedFileSize exceeds="10 GB"/>
+                              </IfAny>
+                          </IfLastModified>
+                      </Delete>
+                  </DefaultRolloverStrategy>
+              </RollingFile>
+              <Socket name="TcpAppender" host="${logstash-server}" port="5044" protocol="TCP">
+                  <PatternLayout pattern="logdate=%d{ISO8601}|thread=%thread|level=%level|node=${hostName}|message=%msg %n"
+                                charset="UTF-8"/>
+              </Socket>
+              <Async name="LogstashAsync" bufferSize="204800">
+                  <AppenderRef ref="TcpAppender"/>
+              </Async>
+          </Appenders>
+          <Loggers>
+              <Root level="info">
+                  <AppenderRef ref="Console-Appender"/>
+                  <AppenderRef ref="RollingFile-Appender"/>
+                  <AppenderRef ref="LogstashAsync"/>
+              </Root>
+              <Logger name="net.corda" level="info" additivity="false">
+                  <AppenderRef ref="RollingFile-Appender"/>
+                  <AppenderRef ref="LogstashAsync"/>
+              </Logger>
+          </Loggers>
+      </Configuration>
+
+  fundadminchain-workflows-1.15-rc1.conf: |+
+    Currency="GBP"
+    amqpHost="10.0.0.8"
+    amqpPort=17710
+    jasperServerHost="10.0.0.8"
+    jasperServerPort=17712
+    alertEMail="admin@fundadminchain.com"
+
+    nodeRoleConfigs = [{
+        node = {
+          nodeType = "cash_exchange"
+          nodeX500Name = "O=Cash Exchange, L=London, C=GB"
+          nodeName = "The Cash Exchange"
+        }
+        allowedNodes = [
+          "O=Cash Exchange, L=London, C=GB",
+          "O=Fidelity Funds Network 1, L=London, C=GB",
+          "O=Fidelity Funds Network 2, L=London, C=GB",
+          "O=Investment Services, L=London, C=GB",
+          "O=Funds Manager, L=London, C=GB"
+        ]
+    },{
+        node = {
+          nodeType = "investor"
+          nodeX500Name = "O=Fidelity Funds Network 1, L=London, C=GB"
+          nodeName = "Fidelity Funds Network 1"
+        }
+        allowedNodes = [
+          "O=Cash Exchange, L=London, C=GB",
+          "O=Fidelity Funds Network 1, L=London, C=GB",
+          "O=Fidelity Funds Network 2, L=London, C=GB",
+          "O=Investment Services, L=London, C=GB",
+          "O=Funds Manager, L=London, C=GB"
+        ]
+    },{
+        node = {
+          nodeType = "investor"
+          nodeX500Name = "O=Fidelity Funds Network 2, L=London, C=GB"
+          nodeName = "Fidelity Funds Network 2"
+        }
+        allowedNodes = [
+          "O=Cash Exchange, L=London, C=GB",
+          "O=Fidelity Funds Network 1, L=London, C=GB",
+          "O=Fidelity Funds Network 2, L=London, C=GB",
+          "O=Investment Services, L=London, C=GB",
+          "O=Funds Manager, L=London, C=GB"
+        ]
+    },{
+        node = {
+          nodeType = "fund"
+          nodeX500Name = "O=Investment Services, L=London, C=GB"
+          nodeName = "Investment Services"
+          managerX500Name = "O=Funds Manager, L=London, C=GB"
+        }
+        allowedNodes = [
+          "O=Cash Exchange, L=London, C=GB",
+          "O=Fidelity Funds Network 1, L=London, C=GB",
+          "O=Fidelity Funds Network 2, L=London, C=GB",
+          "O=Investment Services, L=London, C=GB",
+          "O=Funds Manager, L=London, C=GB"
+        ]
+    },{
+        node = {
+            nodeType = "fund_manager"
+            nodeX500Name = "O=Funds Manager, L=London, C=GB"
+            nodeName = "Funds Manager"
+        }
+        allowedNodes = [
+          "O=Cash Exchange, L=London, C=GB",
+          "O=Fidelity Funds Network 1, L=London, C=GB",
+          "O=Fidelity Funds Network 2, L=London, C=GB",
+          "O=Investment Services, L=London, C=GB",
+          "O=Funds Manager, L=London, C=GB"
+        ]
+    }]
+
+    nodeConfigs = [{
+        nodeX500Name: "O=Investor1, L=London, C=GB",
+        httpPort: 17702,
+        httpAllowedOrigin: "*",
+        amqpBrokerHost: "10.44.54.15",
+        amqpBrokerPort: 17601,
+        hasAmqpNodeApi: true,
+        dirJasperReports: "/Reports/InvestorServices1",
+        nomineeMode: "nominee only",
+        useNominee: true,
+        nominee: {
+          investorType: 1,
+          # TODO: need refactoring for accountIds, caused by adding externalIds
+          accountId: {"id": "d2665be8-2208-4eab-be66-18e3538a3a71", "externalId": "IVOr900000"}
+          company: {
+            accountId: {"id": "d2665be8-2208-4eab-be66-18e3538a3a71", "externalId": "IVOr900000"}
+            companyTrustName:"Investor Services"
+            lei:"74930014MON86WSLOH72"
+            country:"GB"
+            companyType:"CN"
+            taxResidencyInfo:[{
+              id: 0
+              country: "GB"
+              taxNumber: "LL999999L "
+              fatca: "FinInst_PartnerJuri"
+              crs: "FinInst"
+            }]
+            taxUSA: false
+            controllingPersons: []
+          }
+          typeDetails: {
+            "@type": "CN"
+            accountId: {"id": "d2665be8-2208-4eab-be66-18e3538a3a71", "externalId": "IVOr900000"}
+            investmentName: "Ronald Huxley"
+            fca: "Other Investor Services"
+            designation: "Investor Services"
+            accountNumber: "38390001"
+          }
+          bankAccountInfo: {
+            accountId: {"id": "d2665be8-2208-4eab-be66-18e3538a3a71", "externalId": "IVOr900000"}
+            reinvesting: false
+            accounts: [{
+              societyName: "Investor Services"
+              accountNumber: "38390001"
+              address: "15 North Street"
+              sortCode: "123456"
+              societyNumber: "CXJ-K6 897/98X"
+              postcode: "NW62 9BT"
+              holderNames: "Ronald Huxley"
+            }]
+          }
+          contacts: {
+            accountId: {"id": "d2665be8-2208-4eab-be66-18e3538a3a71", "externalId": "IVOr900000"}
+            clientContacts: [{
+              id: 1
+              firstName: "Ronald"
+              surname: "Huxley"
+              dob: "1974-10-30T23:00:00.000Z"
+              country: "GB"
+              postcode: "PE17 3ZX"
+              address: "22 The Fairway, Bexhill-On-Sea"
+              email: "RonaldHuxley@InvestorServices.co.uk"
+              phoneNumber: "4407702998547"
+              capacity: "Management"
+            }]
+            beneficialContacts: []
+          }
+          exchanges: {
+            accountId: {"id": "d2665be8-2208-4eab-be66-18e3538a3a71", "externalId": "IVOr900000"}
+            cashExchangeX500Name: "O=CashExchange1, L=London, C=GB"
+          }
+          accountStatusInfo: {
+            accountId: {"id": "d2665be8-2208-4eab-be66-18e3538a3a71", "externalId": "IVOr900000"}
+            status: "active"
+            showStatusDialog: false
+          }
+        }
+        useInvestors: false
+        ldapConfig: {
+          url: "ldap://10.44.54.15:389"
+          systemUsername: "admin"
+          systemPassword: "admin"
+          rootBase: "dc=enm,dc=fundadminchain,dc=com"
+          userBase: "ou=users"
+          userFilter: "(uid={0})"
+        }
+        useUserRoles: true,
+        userRoles:[{
+          role: "admin"
+          permissions:["node-users*.*", "investors*.*", "node-bank-account*.*", "audit-trail-rows*.get"]
+        },{
+          role: "view_only"
+          permissions:[
+              "reports*.get",
+              "node-users*.get",
+              "node-bank-account*.get",
+              "activity-trail-rows*.get",
+              "chain-walker*.get",
+              "companies*.get",
+              "sub-funds*.get",
+              "payment-data*.get",
+              "notifications*.get",
+              "funds*.get",
+              "investors*.get",
+              "orders*.get",
+              "batch-orders*.get",
+              "calendars*.*",
+              "transactions-history*.get",
+              "unit-prices*.get",
+              "cash-balance*.get",
+              "portfolio-values*.get",
+              "personal-funds-info*.get",
+              "orders-groups*.get"
+          ]
+        },{
+          role: "reporting"
+          permissions:[
+              "reports*.*",
+              "node-users*.get",
+              "investors*.get",
+              "orders*.get",
+              "calendars*.*"
+          ]
+        },{
+          role: "cash_user"
+          permissions:[
+              "reports*.get",
+              "node-users*.get",
+              "node-bank-account*.*",
+              "activity-trail-rows*.get",
+              "chain-walker*.get",
+              "companies*.get",
+              "sub-funds*.get",
+              "payment-data*.get",
+              "notifications*.*",
+              "funds*.get",
+              "investors*.*",
+              "orders*.get",
+              "calendars*.*",
+              "transactions-history*.get",
+              "unit-prices*.get",
+              "cash-balance*.get",
+              "portfolio-values*.get",
+              "personal-funds-info*.get",
+              "batch-orders*.*",
+              "orders*.*-issuance",
+              "orders*.*-redemption"
+          ]
+        },{
+          role: "dealing_user"
+          permissions:[
+              "reports*.get",
+              "node-users*.get",
+              "node-bank-account*.get",
+              "audit-trail-rows*.get",
+              "activity-trail-rows*.get",
+              "chain-walker*.get",
+              "companies*.get",
+              "sub-funds*.get",
+              "payment-data*.get",
+              "notifications*.*",
+              "funds*.get",
+              "investors*.*",
+              "orders*.get",
+              "calendars*.*",
+              "transactions-history*.get",
+              "unit-prices*.get",
+              "cash-balance*.get",
+              "portfolio-values*.get",
+              "personal-funds-info*.get",
+              "batch-orders*.*",
+              "orders*.*-issuance",
+              "orders*.*-redemption",
+              "orders*.*-trade",
+              "orders*.*-switch",
+              "orders*.*-trade",
+              "orders*.*-transfer",
+              "orders*.*-close",
+              "orders*.*-merge",
+              "orders*.*-free-delivery"
+          ]
+        }]
+        useUsers: true
+        users:[{
+          user: {
+              firstName: "admin"
+              surname: ""
+              roles: ["admin"]
+              email: "admin@InvestorServices.co.uk"
+              username: "admin"
+          }
+          secret: "admin"
+        }]
+
+
+binaryData:
+  networkRootTrustStore.jks:
+    "/u3+7QAAAAIAAAACAAAAAgAMdGxzY3Jsc2lnbmVyAAABeNdZ6eEABVguNTA5AAACMzCCAi8wggHVoAMCAQICEHYiXk8P3uWQ35cE/SOkP1swCgYIKoZIzj0EAwIwaDEkMCIGA1UEAwwbVGVzdCBUTFMgU2lnbmVyIENlcnRpZmljYXRlMQswCQYDVQQLDAJIUTETMBEGA1UECgwKSG9sZENvIExMQzERMA8GA1UEBwwITmV3IFlvcmsxCzAJBgNVBAYTAlVTMB4XDTIxMDQxNTAwMDAwMFoXDTQxMDQxMDAwMDAwMFowaDEkMCIGA1UEAwwbVGVzdCBUTFMgU2lnbmVyIENlcnRpZmljYXRlMQswCQYDVQQLDAJIUTETMBEGA1UECgwKSG9sZENvIExMQzERMA8GA1UEBwwITmV3IFlvcmsxCzAJBgNVBAYTAlVTMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvVviXxR7zHC5NjgKrigNVKvqHsBjT5HaVLZZvay5kUZSfO9fcZYz04da/hKsi+oAWI8dqa+DzqZyL8e9zF9ciKNhMF8wHQYDVR0OBBYEFKrFQOJGt2WsvUyZIN2Hr9K6QDO8MA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgECMB0GA1UdJQQWMBQGCCsGAQUFBwMBBggrBgEFBQcDAjAKBggqhkjOPQQDAgNIADBFAiEAycu1oCLNbgMkb0KM5vGd9D+8RWyUv+V24VORCrrUoi4CIEbmgXXe+SwpgOWbAAmWOm7HZOi3rtAalxqKusvElUCxAAAAAgALY29yZGFyb290Y2EAAAF411nuQwAFWC41MDkAAAIuMIICKjCCAc+gAwIBAgIQUbIj3/A0lvgxyE2RHcEBCDAKBggqhkjOPQQDAjBlMSEwHwYDVQQDDBhUZXN0IFJvb3QgQ0EgQ2VydGlmaWNhdGUxCzAJBgNVBAsMAkhRMRMwEQYDVQQKDApIb2xkQ28gTExDMREwDwYDVQQHDAhOZXcgWW9yazELMAkGA1UEBhMCVVMwHhcNMjEwNDE1MDAwMDAwWhcNNDEwNDEwMDAwMDAwWjBlMSEwHwYDVQQDDBhUZXN0IFJvb3QgQ0EgQ2VydGlmaWNhdGUxCzAJBgNVBAsMAkhRMRMwEQYDVQQKDApIb2xkQ28gTExDMREwDwYDVQQHDAhOZXcgWW9yazELMAkGA1UEBhMCVVMwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARAXsDIjJihtlTVFpHhKom6PgrztQFTlbQPkVZ9FxCVYzyDMxgOYs0clCFauL1lfDmdnb0uzOkUXeeEx1zbCp6uo2EwXzAdBgNVHQ4EFgQU6n0BRrptmMM16bVW/EyBiXx+WiMwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMCAYYwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMCMAoGCCqGSM49BAMCA0kAMEYCIQDon73521zvu42zaUoQRLz0QMO1H2lWog8lZZBlp1HaSQIhAPSmmsNvAwCJONmIuyoFyloAmg5V97/xIZXw57Yo87eDHRAn/lhsjN7P6inRJsGzN7+9j0A="   
+  network-parameters.file:
+    "Y29yZGEBAAAAgMViAAAAAAAB0AAAF5sAAAADAKMibmV0LmNvcmRhOmU5OHRFaFpvRGdDUGF3N2UvQ2dnTUE9PdAAABPZAAAAAgCjIm5ldC5jb3JkYTpEYStQVnZhZ3IxWFRFSGdMV1lyVnNBPT3QAAAK0QAAAAGwAAAKyGNvcmRhAQAAAIDFYgAAAAAAAdAAAAqxAAAAAwCjIm5ldC5jb3JkYTprWlhLRHFhZ2o4WGd5UEdzZVVFUzJBPT3QAAAB6wAAAAlUAQCjHG5ldC5jb3JkYTpqYXZhLnRpbWUuRHVyYXRpb27ADAJUAIEAAAAAAAFRgHEAoAAAcQCgAABUBACjG25ldC5jb3JkYTpqYXZhLnRpbWUuSW5zdGFudMAPAoEAAAAAYG+MCHEM0KPAAKMibmV0LmNvcmRhOkxtNkQ4UjVta3VjWkhCcW1DajZLbEE9PdAAAAEDAAAAAQCjIm5ldC5jb3JkYTpMZ0dBT2J2OWhYK3NnZm1BQTVRNnBBPT3A2AIAoyJuZXQuY29yZGE6SDlLT2k4YWdVdXNnS0tpM01FQjN4Zz09wK8CAKMibmV0LmNvcmRhOm5nZHdidDZrUlQwbDVubjE2dWY4N0E9PcA1BkChAkNIoQZadXJpY2ihI0luaXRpYWwgbm90YXJ5IGZvciBDRU5NIGVudmlyb25tZW50QEAAoyFuZXQuY29yZGE6amF2YS5zZWN1cml0eS5QdWJsaWNLZXmgLDAqMAUGAytlcAMhAKFZynbwNHx11LQk5imgGegHSC6rHxdp8TIShVL2tOFIQgCjIm5ldC5jb3JkYTpaWjgxQ1Y1WVVrczFld1NHcEhuNFRRPT3BAQAAoyJuZXQuY29yZGE6WGMyVUpDaGU5ay9hQSs0dmk0WTZuZz09wQEAAIDFYgAAAAAAAtAAAAh8AAAAAdAAAAhzAAAACQCAxWIAAAAAAAXQAAACpAAAAAWhJW5ldC5jb3JkYS5jb3JlLm5vZGUuTmV0d29ya1BhcmFtZXRlcnNARQCAxWIAAAAAAAPAJgKjIm5ldC5jb3JkYTprWlhLRHFhZ2o4WGd5UEdzZVVFUzJBPT1A0AAAAkAAAAAJAIDFYgAAAAAABMAUB6EFZXBvY2ihA2ludEWhATBAQUIAgMViAAAAAAAEwCgHoQxldmVudEhvcml6b26hEmphdmEudGltZS5EdXJhdGlvbkVAQEFCAIDFYgAAAAAABMAdB6EObWF4TWVzc2FnZVNpemWhA2ludEWhATBAQUIAgMViAAAAAAAEwCEHoRJtYXhUcmFuc2FjdGlvblNpemWhA2ludEWhATBAQUIAgMViAAAAAAAEwCUHoRZtaW5pbXVtUGxhdGZvcm1WZXJzaW9uoQNpbnRFoQEwQEFCAIDFYgAAAAAABMAnB6EMbW9kaWZpZWRUaW1loRFqYXZhLnRpbWUuSW5zdGFudEVAQEFCAIDFYgAAAAAABMBFB6EIbm90YXJpZXOhASrAMQGhLmphdmEudXRpbC5MaXN0PG5ldC5jb3JkYS5jb3JlLm5vZGUuTm90YXJ5SW5mbz5AQEFCAIDFYgAAAAAABMBNB6EQcGFja2FnZU93bmVyc2hpcKEBKsAxAaEuamF2YS51dGlsLk1hcDxzdHJpbmcsIGphdmEuc2VjdXJpdHkuUHVibGljS2V5PkBAQUIAgMViAAAAAAAEwHgHoSJ3aGl0ZWxpc3RlZENvbnRyYWN0SW1wbGVtZW50YXRpb25zoQEqwEoBoUdqYXZhLnV0aWwuTWFwPHN0cmluZywgamF2YS51dGlsLkxpc3Q8bmV0LmNvcmRhLmNvcmUuY3J5cHRvLlNlY3VyZUhhc2g+PkBAQUIAgMViAAAAAAAGwGwGoS5qYXZhLnV0aWwuTGlzdDxuZXQuY29yZGEuY29yZS5ub2RlLk5vdGFyeUluZm8+QEWhBGxpc3QAgMViAAAAAAADwCYCoyJuZXQuY29yZGE6TG02RDhSNW1rdWNaSEJxbUNqNktsQT09QEUAgMViAAAAAAAFwMAFoR5uZXQuY29yZGEuY29yZS5ub2RlLk5vdGFyeUluZm9ARQCAxWIAAAAAAAPAJgKjIm5ldC5jb3JkYTpMZ0dBT2J2OWhYK3NnZm1BQTVRNnBBPT1AwGkCAIDFYgAAAAAABMAvB6EIaWRlbnRpdHmhHW5ldC5jb3JkYS5jb3JlLmlkZW50aXR5LlBhcnR5RUBAQUIAgMViAAAAAAAEwCEHoQp2YWxpZGF0aW5noQdib29sZWFuRaEFZmFsc2VAQUIAgMViAAAAAAAFwNEFoR1uZXQuY29yZGEuY29yZS5pZGVudGl0eS5QYXJ0eUBFAIDFYgAAAAAAA8AmAqMibmV0LmNvcmRhOkg5S09pOGFnVXVzZ0tLaTNNRUIzeGc9PUDAewIAgMViAAAAAAAEwDMHoQRuYW1loSVuZXQuY29yZGEuY29yZS5pZGVudGl0eS5Db3JkYVg1MDBOYW1lRUBAQUIAgMViAAAAAAAEwC8HoQlvd25pbmdLZXmhASrAGgGhF2phdmEuc2VjdXJpdHkuUHVibGljS2V5QEBBQgCAxWIAAAAAAAXQAAABRAAAAAWhJW5ldC5jb3JkYS5jb3JlLmlkZW50aXR5LkNvcmRhWDUwME5hbWVARQCAxWIAAAAAAAPAJgKjIm5ldC5jb3JkYTpuZ2R3YnQ2a1JUMGw1bm4xNnVmODdBPT1AwOMGAIDFYgAAAAAABMAaB6EKY29tbW9uTmFtZaEGc3RyaW5nRUBAQkIAgMViAAAAAAAEwBcHoQdjb3VudHJ5oQZzdHJpbmdFQEBBQgCAxWIAAAAAAATAGAehCGxvY2FsaXR5oQZzdHJpbmdFQEBBQgCAxWIAAAAAAATAHAehDG9yZ2FuaXNhdGlvbqEGc3RyaW5nRUBAQUIAgMViAAAAAAAEwCAHoRBvcmdhbmlzYXRpb25Vbml0oQZzdHJpbmdFQEBCQgCAxWIAAAAAAATAFQehBXN0YXRloQZzdHJpbmdFQEBCQgCAxWIAAAAAAAbAawahLmphdmEudXRpbC5NYXA8c3RyaW5nLCBqYXZhLnNlY3VyaXR5LlB1YmxpY0tleT5ARaEDbWFwAIDFYgAAAAAAA8AmAqMibmV0LmNvcmRhOlpaODFDVjVZVWtzMWV3U0dwSG40VFE9PUBFAIDFYgAAAAAABsCEBqFHamF2YS51dGlsLk1hcDxzdHJpbmcsIGphdmEudXRpbC5MaXN0PG5ldC5jb3JkYS5jb3JlLmNyeXB0by5TZWN1cmVIYXNoPj5ARaEDbWFwAIDFYgAAAAAAA8AmAqMibmV0LmNvcmRhOlhjMlVKQ2hlOWsvYUErNHZpNFk2bmc9PUBFAIDFYgAAAAAABsBuBqEwamF2YS51dGlsLkxpc3Q8bmV0LmNvcmRhLmNvcmUuY3J5cHRvLlNlY3VyZUhhc2g+QEWhBGxpc3QAgMViAAAAAAADwCYCoyJuZXQuY29yZGE6Y1NrenFic2t1SjB0ekdTbzFrK1p2dz09QEUAgMViAAAAAAAFwLsFoSBuZXQuY29yZGEuY29y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Z6EwbmV0LmNvcmRhLmNvcmUuaW50ZXJuYWwuRGlnaXRhbFNpZ25hdHVyZVdpdGhDZXJ0RUBAQUIAgMViAAAAAAAFwJkFoT5uZXQuY29yZGEuY29yZS5zZXJpYWxpemF0aW9uLlNlcmlhbGl6ZWRCeXRlczxqYXZhLmxhbmcuT2JqZWN0PkBFAIDFYgAAAAAAA8AmAqMibmV0LmNvcmRhOkRhK1BWdmFncjFYVEVIZ0xXWXJWc0E9PUDAIgEAgMViAAAAAAAEwBUHoQVieXRlc6EGYmluYXJ5RUBAQUIAgMViAAAAAAAF0AAAASUAAAAFoTBuZXQuY29yZGEuY29yZS5pbnRlcm5hbC5EaWdpdGFsU2lnbmF0dXJlV2l0aENlcnRARQCAxWIAAAAAAAPAJgKjIm5ldC5jb3JkYTpWVEh4dmZNWGFBT1dxekpnNHcvQVBRPT1AwLkDAIDFYgAAAAAABMAuB6ECYnmhImphdmEuc2VjdXJpdHkuY2VydC5YNTA5Q2VydGlmaWNhdGVFQEBBQgCAxWIAAAAAAATAFQehBWJ5dGVzoQZiaW5hcnlFQEBBQgCAxWIAAAAAAATAUQehEHBhcmVudENlcnRzQ2hhaW6hASrANQGhMmphdmEudXRpbC5MaXN0PGphdmEuc2VjdXJpdHkuY2VydC5YNTA5Q2VydGlmaWNhdGU+QEBBQgCAxWIAAAAAAAbAcAahMmphdmEudXRpbC5MaXN0PGphdmEuc2VjdXJpdHkuY2VydC5YNTA5Q2VydGlmaWNhdGU+QEWhBGxpc3QAgMViAAAAAAADwCYCoyJuZXQuY29yZGE6WVJEVXR3YS9oNTNKVGpraDZaNXYrQT09QEUAgMViAAAAAAAJwQEA"
+  bridge.jks:
+    "/u3+7QAAAAIAAAABAAAAAQAKYnJpZGdlY2VydAAAAXj2iXCGAAAAfzB9MA4GCisGAQQBKgIRAQEFAARrkVR0BmyrGsUiK8DQwdU9fek1mGkUgtSZSoPlXRTj+q5tRPYGIF07nTEMEr676fD8fCgLsKl5vsefXw2/P+aCLqfejDLAcvv8cP9L4iapZaydSwRZBL5rpWKRLHLEXh+bmejJ8V4uYsH019UAAAACAAVYLjUwOQAAAgAwggH8MIIBoKADAgECAgR2bZBBMAwGCCqGSM49BAMCBQAwSzELMAkGA1UEBhMCR0IxDzANBgNVBAcTBkxvbmRvbjETMBEGA1UEChMKTG9jYWwgT25seTEWMBQGA1UEAxMNRmlyZXdhbGwgUm9vdDAeFw0yMTA0MjEyMjI1MDVaFw0zMTA0MTkyMjI1MDVaMEoxCzAJBgNVBAYTAkdCMQ8wDQYDVQQHEwZMb25kb24xEzARBgNVBAoTCkxvY2FsIE9ubHkxFTATBgNVBAMTDEJyaWRnZSBMb2NhbDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABE471ouvMNLSZOpLLflhwefUdVrQ7U8g4/EfrJALU/TVhScqQ4etoTxMBG3+kdWz4okhuFKxnWHICOeutOlVLOqjcTBvMB8GA1UdIwQYMBaAFGdbceCLT+5n/KP1pwsRhHxXr8k9MB0GA1UdJQQWMBQGCCsGAQUFBwMBBggrBgEFBQcDAjAOBgNVHQ8BAf8EBAMCBaAwHQYDVR0OBBYEFCzIsM40sivMpmvysgRMiTV9XpxnMAwGCCqGSM49BAMCBQADSAAwRQIhAKtA/u6gr3BOQt2Bbqff9ohNuAGptb/+1DMTKnzLwov2AiARP8zblCE7PG4etf+wdS+c0Y6B0f1g+MB6CAUKBdUykQAFWC41MDkAAAG/MIIBuzCCAV+gAwIBAgIERsYN2jAMBggqhkjOPQQDAgUAMEsxCzAJBgNVBAYTAkdCMQ8wDQYDVQQHEwZMb25kb24xEzARBgNVBAoTCkxvY2FsIE9ubHkxFjAUBgNVBAMTDUZpcmV3YWxsIFJvb3QwHhcNMjEwNDIxMjIyNTA0WhcNMzEwNDE5MjIyNTA0WjBLMQswCQYDVQQGEwJHQjEPMA0GA1UEBxMGTG9uZG9uMRMwEQYDVQQKEwpMb2NhbCBPbmx5MRYwFAYDVQQDEw1GaXJld2FsbCBSb290MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvAWOUE9/h36yzKMVeWPo7MeeefGrkdJZHja/Pj2wvN9fkoMUIcKdJMI3Iay7C1uWJ87AxMmCoLgFXYAmscl53aMvMC0wDAYDVR0TBAUwAwEB/zAdBgNVHQ4EFgQUZ1tx4ItP7mf8o/WnCxGEfFevyT0wDAYIKoZIzj0EAwIFAANIADBFAiEAn1gEK27lPMVBicgoLAU6lblYMWRG8IjlDECTAlhFoYoCIEIm8EJ6flvYe4dzSWh0B6bWTZJNVTE6xxDXDxddKyQ3ytDPUZ3g0Juq9cp9C9H1AcCe1eI="
+  float.jks:
+    "/u3+7QAAAAIAAAABAAAAAQAJZmxvYXRjZXJ0AAABePaJcpoAAAB/MH0wDgYKKwYBBAEqAhEBAQUABGuY4bXF8iV54qhfbxAxh/HfGuPIIqkbhdP9UrLzQlLLVg24kxgZV/Xw80kM1kv6lSjsK3U8j/8V4fOS5QtnKc154Zcqwtrv7hJY7UqYYkyCdQuNcXhzkpQitQOuK69NI2iBMLsIGK6NsTClCgAAAAIABVguNTA5AAAB/jCCAfowggGfoAMCAQICBGjqAFkwDAYIKoZIzj0EAwIFADBLMQswCQYDVQQGEwJHQjEPMA0GA1UEBxMGTG9uZG9uMRMwEQYDVQQKEwpMb2NhbCBPbmx5MRYwFAYDVQQDEw1GaXJld2FsbCBSb290MB4XDTIxMDQyMTIyMjUwNVoXDTMxMDQxOTIyMjUwNVowSTELMAkGA1UEBhMCR0IxDzANBgNVBAcTBkxvbmRvbjETMBEGA1UEChMKTG9jYWwgT25seTEUMBIGA1UEAxMLRmxvYXQgTG9jYWwwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAT42nvdQb+3rDPZACSV3ULS0Ers7ERiRtpCEv0dPvkHDvoo8iXcaLfOzYX+5Tmi2OkzcRnzSG2vutcqrneaaz9wo3EwbzAfBgNVHSMEGDAWgBRnW3Hgi0/uZ/yj9acLEYR8V6/JPTAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwDgYDVR0PAQH/BAQDAgWgMB0GA1UdDgQWBBSHzTmBXPZKoMkuRLssEbg4Gu0B3DAMBggqhkjOPQQDAgUAA0cAMEQCIEDahRSnvlidS00RGuQnxMSkG3+JcnI3iRktVP2Yo4JFAiBlXnbdP9EBj88vfAt2K/UrbC5Zi4Nd1/lLRzLxF6IASAAFWC41MDkAAAG/MIIBuzCCAV+gAwIBAgIERsYN2jAMBggqhkjOPQQDAgUAMEsxCzAJBgNVBAYTAkdCMQ8wDQYDVQQHEwZMb25kb24xEzARBgNVBAoTCkxvY2FsIE9ubHkxFjAUBgNVBAMTDUZpcmV3YWxsIFJvb3QwHhcNMjEwNDIxMjIyNTA0WhcNMzEwNDE5MjIyNTA0WjBLMQswCQYDVQQGEwJHQjEPMA0GA1UEBxMGTG9uZG9uMRMwEQYDVQQKEwpMb2NhbCBPbmx5MRYwFAYDVQQDEw1GaXJld2FsbCBSb290MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvAWOUE9/h36yzKMVeWPo7MeeefGrkdJZHja/Pj2wvN9fkoMUIcKdJMI3Iay7C1uWJ87AxMmCoLgFXYAmscl53aMvMC0wDAYDVR0TBAUwAwEB/zAdBgNVHQ4EFgQUZ1tx4ItP7mf8o/WnCxGEfFevyT0wDAYIKoZIzj0EAwIFAANIADBFAiEAn1gEK27lPMVBicgoLAU6lblYMWRG8IjlDECTAlhFoYoCIEIm8EJ6flvYe4dzSWh0B6bWTZJNVTE6xxDXDxddKyQ3xrYZRYOwrXfFZ1tz9FDdFRNpDzo="
+  trust.jks:
+    "/u3+7QAAAAIAAAABAAAAAgAEcm9vdAAAAXj2iW5rAAVYLjUwOQAAAb8wggG7MIIBX6ADAgECAgRGxg3aMAwGCCqGSM49BAMCBQAwSzELMAkGA1UEBhMCR0IxDzANBgNVBAcTBkxvbmRvbjETMBEGA1UEChMKTG9jYWwgT25seTEWMBQGA1UEAxMNRmlyZXdhbGwgUm9vdDAeFw0yMTA0MjEyMjI1MDRaFw0zMTA0MTkyMjI1MDRaMEsxCzAJBgNVBAYTAkdCMQ8wDQYDVQQHEwZMb25kb24xEzARBgNVBAoTCkxvY2FsIE9ubHkxFjAUBgNVBAMTDUZpcmV3YWxsIFJvb3QwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAS8BY5QT3+HfrLMoxV5Y+jsx5558auR0lkeNr8+PbC831+SgxQhwp0kwjchrLsLW5YnzsDEyYKguAVdgCaxyXndoy8wLTAMBgNVHRMEBTADAQH/MB0GA1UdDgQWBBRnW3Hgi0/uZ/yj9acLEYR8V6/JPTAMBggqhkjOPQQDAgUAA0gAMEUCIQCfWAQrbuU8xUGJyCgsBTqVuVgxZEbwiOUMQJMCWEWhigIgQibwQnp+W9h7h3NJaHQHptZNkk1VMTrHENcPF10rJDfNiBTW6qaWUbYYWRzcJvIiQBb30g=="
+  nodekeystore.jks:
+    "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"
+  sslkeystore.jks:
+    "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"
+  truststore.jks:
+    "/u3+7QAAAAIAAAACAAAAAgAMdGxzY3Jsc2lnbmVyAAABeNeygBMABVguNTA5AAACMzCCAi8wggHVoAMCAQICEHYiXk8P3uWQ35cE/SOkP1swCgYIKoZIzj0EAwIwaDEkMCIGA1UEAwwbVGVzdCBUTFMgU2lnbmVyIENlcnRpZmljYXRlMQswCQYDVQQLDAJIUTETMBEGA1UECgwKSG9sZENvIExMQzERMA8GA1UEBwwITmV3IFlvcmsxCzAJBgNVBAYTAlVTMB4XDTIxMDQxNTAwMDAwMFoXDTQxMDQxMDAwMDAwMFowaDEkMCIGA1UEAwwbVGVzdCBUTFMgU2lnbmVyIENlcnRpZmljYXRlMQswCQYDVQQLDAJIUTETMBEGA1UECgwKSG9sZENvIExMQzERMA8GA1UEBwwITmV3IFlvcmsxCzAJBgNVBAYTAlVTMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvVviXxR7zHC5NjgKrigNVKvqHsBjT5HaVLZZvay5kUZSfO9fcZYz04da/hKsi+oAWI8dqa+DzqZyL8e9zF9ciKNhMF8wHQYDVR0OBBYEFKrFQOJGt2WsvUyZIN2Hr9K6QDO8MA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgECMB0GA1UdJQQWMBQGCCsGAQUFBwMBBggrBgEFBQcDAjAKBggqhkjOPQQDAgNIADBFAiEAycu1oCLNbgMkb0KM5vGd9D+8RWyUv+V24VORCrrUoi4CIEbmgXXe+SwpgOWbAAmWOm7HZOi3rtAalxqKusvElUCxAAAAAgALY29yZGFyb290Y2EAAAF417KAFQAFWC41MDkAAAIuMIICKjCCAc+gAwIBAgIQUbIj3/A0lvgxyE2RHcEBCDAKBggqhkjOPQQDAjBlMSEwHwYDVQQDDBhUZXN0IFJvb3QgQ0EgQ2VydGlmaWNhdGUxCzAJBgNVBAsMAkhRMRMwEQYDVQQKDApIb2xkQ28gTExDMREwDwYDVQQHDAhOZXcgWW9yazELMAkGA1UEBhMCVVMwHhcNMjEwNDE1MDAwMDAwWhcNNDEwNDEwMDAwMDAwWjBlMSEwHwYDVQQDDBhUZXN0IFJvb3QgQ0EgQ2VydGlmaWNhdGUxCzAJBgNVBAsMAkhRMRMwEQYDVQQKDApIb2xkQ28gTExDMREwDwYDVQQHDAhOZXcgWW9yazELMAkGA1UEBhMCVVMwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARAXsDIjJihtlTVFpHhKom6PgrztQFTlbQPkVZ9FxCVYzyDMxgOYs0clCFauL1lfDmdnb0uzOkUXeeEx1zbCp6uo2EwXzAdBgNVHQ4EFgQU6n0BRrptmMM16bVW/EyBiXx+WiMwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMCAYYwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMCMAoGCCqGSM49BAMCA0kAMEYCIQDon73521zvu42zaUoQRLz0QMO1H2lWog8lZZBlp1HaSQIhAPSmmsNvAwCJONmIuyoFyloAmg5V97/xIZXw57Yo87eDn6LH50itECC5ErwAIE+wo0vBYEo="
