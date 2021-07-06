@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-fundmanager-web-dep
+  namespace: corda-fac
+  labels:
+    app: node-fundmanager-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: node-fundmanager-web
+  template:
+    metadata:
+      labels:
+        app: node-fundmanager-web
+    spec:
+      containers:
+      - name: node-fundmanager-web
+        image: crodaaks.azurecr.io/fund-administrator:v3.1
+        imagePullPolicy: "Always"
+        ports:
+        - containerPort: 80
+          name: port1
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1G
+          limits:
+            cpu: 1000m
+            memory: 1512M
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-fundmanager-web-svc
+  namespace: corda-fac
+spec:
+  selector:
+    app: node-fundmanager-web
+  ports:
+  - port: 80
+    targetPort: 80
+  type: LoadBalancer
