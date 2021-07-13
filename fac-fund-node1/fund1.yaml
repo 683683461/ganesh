@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-fund1-dep
+  namespace: corda-fac
+  labels:
+    app: node-fund1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: node-fund1
+  template:
+    metadata:
+      labels:
+        app: node-fund1
+    spec:
+      containers:
+      - name: node-fund1
+        image: crodaaks.azurecr.io/fac_corda:v4.7
+        imagePullPolicy: "Always"
+        ports:
+        - containerPort: 10005
+          name: port1
+        - containerPort: 30005
+          name: port2
+        - containerPort: 2223
+          name: port3
+        - containerPort: 17704
+          name: port4
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256M
+          limits:
+            cpu: 500m
+            memory: 512M
+        env:
+        - name: CP
+          value: "1"
+        - name: LOGPATH
+          value: /opt/logs
+        - name: LOGSTASH
+          value: 10.244.4.76
+        - name: IDENTITY_HOST 
+          value: 20.68.121.136
+        - name: IDENTITY_PORT
+          value: "10000"
+        - name: NETWORK_MAP_HOST
+          value: 20.68.122.69
+        - name: NETWORK_MAP_PORT
+          value: "10000"
+        - name: PUBLIC_HOST
+          value: 10.44.54.15
+        - name: P2P_PORT
+          value: "30005"
+        - name: LEGAL_NAME
+          value: "O=Fidelity6,L=London,C=GB"
+        - name: DB_USER
+          value: cordadb@fund-node-1
+        - name: DB_PASSWORD
+          value: fac@cenm123
+        - name: DB_SCHEMA
+          value: postgres
+        - name: DB_NAME
+          value: postgres
+        - name: DB_HOST
+          value: fund-node-1.postgres.database.azure.com
+        - name: DB_PORT
+          value: "5432"
+        - name: MIGRATION_MODE
+          value: "false"
+        volumeMounts:
+        - mountPath: /opt/corda/persistent
+          name: corda-node-2-pv
+        - mountPath: /opt/corda/persistent/log4j2.xml
+          name: node-config-volume
+          readOnly: false
+          subPath: log4j2.xml
+        - mountPath: /opt/corda/persistent/node.conf
+          name: node-config-volume
+          readOnly: false
+          subPath: node.conf
+        - mountPath: /opt/corda/persistent/trust-stores/networkRootTrustStore.jks
+          name: node-config-volume
+          readOnly: false
+          subPath: networkRootTrustStore.jks
+      volumes:
+      - name: corda-node-2-pv
+        persistentVolumeClaim:
+          claimName: corda-node-2-pvc
+      - configMap:
+          defaultMode: 0777
+          name: corda-node-1-corda-configmap
+        name: node-config-volume
