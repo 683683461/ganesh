@@ -1,0 +1,35 @@
+
+---
+# Source: corda/templates/volume-CordaNode.yml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: corda-node-fundmanger-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: storage-1
+  volumeName: corda-node-fundmanger-pv-volume
+  resources:
+    requests:
+      storage: 2Gi
+---
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: corda-node-fundmanger-pv-volume
+spec:
+  storageClassName: storage-1
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteOnce
+  azureFile:
+    secretName: storage-1-secret
+    shareName: node-fundmanger
+    readOnly: false
+  mountOptions:
+  - dir_mode=0777
+  - file_mode=0777
+  - uid=1000
+  - gid=1000
